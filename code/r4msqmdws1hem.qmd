@@ -224,6 +224,9 @@ penguins %>%
     fill = "Island"
   )   + 
   theme_minimal()
+ggsave("../outputs/body_mass_boxplot.png", 
+       width = 120, height = 120, 
+       units = "mm", dpi = 300)
 
 ```
 
@@ -252,7 +255,10 @@ mass_compare_plot <- penguins |>
   theme_minimal()
 
 mass_compare_plot
-
+ggsave("../outputs/mass_compare_plot.png", 
+       plot = mass_compare_plot, 
+       width = 120, height = 120, 
+       units = "mm", dpi = 300)
 ```
 ```{r}
 #--#
@@ -284,8 +290,6 @@ ggplot(aes(x = species, y = mean_mass, colour = island)) +
 mass_summary
 
 
-
-
 ##--##
 #The data visually looks less spread out with standard error meaning the variation in masses of each species in the context of what island seem smaller. Standard error describes how precisely the samples represent the true population mean so I feel like it would be better than standard deviation for this large data set and variation in mass. 
 ```
@@ -299,10 +303,11 @@ write_csv(biological_signal, "../outputs/penguin_species_mass_summary.csv")
 #saveRDS(clean_cohort, "outputs/clean_penguin_morphology_cohort.rds")
 #Looked over my whole code and we never made a clean cohort only adelie_cohort or clean_scientific_fields so not sure what we are trying to save here
 
-ggsave("outputs/mass_compare_plot.png", 
+ggsave("../outputs/mass_compare_plot.png", 
        plot = mass_compare_plot, 
        width = 120, height = 120, 
        units = "mm", dpi = 300)
+
 
 ```
 
