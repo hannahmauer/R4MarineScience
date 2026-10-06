@@ -1,0 +1,243 @@
+---
+title: "r4msws2finalex"
+format: html
+editor: visual
+---
+##I am leaving my messy incorrect code on my r4msqmdws2hem file. I went to previous students work on their GitHub and was able to get the code to run correctly. Thank you to my next door neighbor Darius for help with this code!
+```{r setup, include=FALSE}
+# Set options, housekeeping
+knitr::opts_chunk$set(
+	echo = TRUE,
+	include = TRUE,
+	message = FALSE,
+	warning = FALSE)
+```
+
+# Introduction
+
+This code contains the work realised on the last exercise (Keystone exercise: Estuary Fish Survey - Data Rescue Mission) of the second workshop of the R for Marine Science Module.
+
+The goal is to rescue and clean a messy dataset from an estuary fish survey, and then use it to explore how fish abundance changes along a salinity gradient. The exercise is structured into five phases: 
+
+  - Phase 1: Ingestion and Decontamination
+  
+      Cleaning and standardising the raw data, including parsing dates and handling hardware error codes.
+
+  - Phase 2: The Relational Architecture
+      
+      Building a relational database by merging the catch data with spatial metadata and water quality summaries.
+
+  - Phase 3: The Zero-Catch Framework
+      
+      Creating a complete dataset that includes zero-catch records for all combinations of site, date, and species.
+  
+  - Phase 4: Statistical Extraction
+      
+      Summarising the data to calculate mean and standard error for fish catch and salinity across different estuary zones and species.
+  
+  - Phase 5: Visual Communication
+      
+      Using ggplot2 to create a multi-panel plot that visualises the relationship between fish abundance and salinity for different species.
+
+
+```{r housekeeping, message=FALSE, warning=FALSE, include=FALSE}
+rm(list=ls())
+```
+
+```{r packages, message=FALSE, warning=FALSE, include=FALSE}
+library(tidyverse)
+library(lubridate)
+library(readxl)
+library(ggplot2)
+```
+
+# Phase 1: Ingestion and Decontamination
+
+## Load datasets
+
+```{r Load datasets}
+catch_site1 <- read_excel("data/workshop2/estuary_catch_log.xlsx", sheet = 1)
+catch_site1
+catch_site2 <- read_excel("data/workshop2/estuary_catch_log.xlsx", sheet = 2)
+catch_site2
+catch_site3 <- read_excel("data/workshop2/estuary_catch_log.xlsx", sheet = 3)
+catch_site3
+catch_site4 <- read_excel("data/workshop2/estuary_catch_log.xlsx", sheet = 4)
+catch_site4
+
+catch_log <- bind_rows(catch_site1, catch_site2, catch_site3,catch_site4)
+catch_log
+
+metadata <- read_csv("data/workshop2/estuary_metadata.csv")
+metadata
+sonde_data <- read_csv("data/workshop2/estuary_sonde_data.csv")
+sonde_data
+species_dictionary <- read_csv("data/workshop2/species_dictionary.csv")
+species_dictionary
+```
+
+### catch_log
+
+```{r catch_log Ingestion}
+# Investigate dataset catch_log
+catch_log
+head(catch_log)
+glimpse(catch_log)
+str(catch_log)
+```
+
+```{r catch_log Decontamination}
+# Standardise the site and species names to lowercase with underscores
+clean_catch_log <- catch_log |>
+  mutate(
+    #site names
+    # 1. Make sure all site names are in lowercase
+    site = str_to_lower(site),
+    # 2. Trim any leading or trailing whitespace (invisible spaces at the ends)
+    site = str_trim(site),
+    # 3. Replace any spaces with underscores
+    site = str_replace_all(site, pattern = " ", replacement = "_"),
+    #species names
+    # 1. Make sure all site names are in lowercase
+    species = str_to_lower(species),
+    # 2. Trim any leading or trailing whitespace (invisible spaces at the ends)
+    species = str_trim(species),
+    # 3. Replace any spaces with underscores
+    species = str_replace_all(species, pattern = " ", replacement = "_")
+      )
+print(clean_catch_log)
+```
+
+### sonde_data
+
+```{r sonde_data Ingestion and Decontamination}
+# Investigate dataset catch_log
+sonde_data
+head(sonde_data)
+glimpse(sonde_data)
+str(sonde_data)
+```
+
+```{r sonde_data Temporal Parsing & Hardware Error}
+# Parse dates into formal Date-Time objects
+clean_sonde_data <- sonde_data |>
+  mutate(
+    # Parse dates into formal Date-Time objects
+    timestamp = dmy_hm(timestamp),
+    # Convert the -999 error codes to true NA values in the turbidity column
+    turbidity = na_if(turbidity, -999),
+    # Convert the negative values to true NA values in the salinity column
+    salinity = if_else(salinity < 0, NA, salinity)
+  )
+clean_sonde_data
+```
+
+# Phase 2: The Relational Architecture
+
+## Summarise the water sensor data
+
+```{r Summarise the water sensor data}
+#Create a summary table with daily mean temperature and salinity for each site
+summary_sensor_data <- clean_sonde_data |>
+  group_by(site, floor_date(timestamp, unit = "day")) |>
+  summarise(mean_salinity = mean(salinity), mean_turbidity = mean(na.omit(turbidity))) #remove NAs from the mean calcul for daily tubidity
+summary_sensor_data
+```
+
+## Taxonomic Translation
+
+```{r Taxonomic Translation}
+# Use a mutating join to merge your species_dictionary into your catch data, replacing the common names with accurate scientific taxonomy.
+catch_scientific_name <- clean_catch_log |>
+  # Join a column with adequate scientific name for each observation in clean_catch_log
+  left_join(species_dictionary, by = join_by(species == common_name)) |>
+  # Replace the common names by the scientific names in the 'species' column
+  mutate(
+    species = scientific_name
+  ) |>
+  # Remove the 'scientific_name' column
+  select(-scientific_name)
+catch_scientific_name
+```
+
+## The Grand Join
+
+Merge translated catch data, your spatial metadata, and your daily water quality summaries into a single master data frame.
+
+```{r The Grand Join part1 - metadata site names standarisation and remane column with date in summary_sensor_data}
+# celan metadata
+clean_metadata <- metadata |>
+  mutate(
+    # 1. Make sure all site names are in lowercase
+    site_name = str_to_lower(site_name),
+    # 2. Trim any leading or trailing whitespace (invisible spaces at the ends)
+    site_name = str_trim(site_name),
+    # 3. Replace any spaces with underscores
+    site_name = str_replace_all(site_name, pattern = " ", replacement = "_")
+  )
+clean_metadata
+
+#summary_sensor_data date column change (necessary for later step)
+colnames(summary_sensor_data)[2] <- "date"
+summary_sensor_data
+```
+
+```{r The Grand Join part2 - Merge all dfs}
+master_df <- catch_scientific_name |>
+  # Merge catch_scientific_name and clean_metadata by the site names
+  left_join(clean_metadata, by = join_by("site" == "site_name")) |>
+  # Merge summary_sensor_data to the previous merge df, by site and date
+  left_join(summary_sensor_data, by = join_by(site, date))
+master_df
+```
+
+
+# Phase 3: The Zero-Catch Framework
+
+```{r build zero-data framework}
+# Use tidyr::complete() to build a zero-data framework, filling in any missing combinations of site, date, and species with a catch value of 0.
+tidy_master_df <- master_df |>
+  complete(site, date, species, fill = list(catch = 0))
+tidy_master_df
+
+# Replace NAs in count column with 0s with coalesce() function
+tidy_master_df <- tidy_master_df |>
+  mutate(count = coalesce(count, 0))
+tidy_master_df
+```
+
+# Phase 4: Statistical Extraction
+
+```{r Statistical Extraction}
+# From your master dataset, generate a clean summary table showing the mean ± standard error of both the fish catch (count) and the salinity for each scientific species across each estuary zone.
+summary_table <- tidy_master_df |>
+  group_by(zone, species) |>
+  summarise(
+    m_catch = mean(count),
+    se_catch = sd(count) / sqrt(n()),
+    m_salinity = mean(mean_salinity, na.rm = TRUE),
+    se_salinity = sd(mean_salinity, na.rm = TRUE) / sqrt(sum(!is.na(mean_salinity)))
+  )
+summary_table
+```
+
+# Phase 5: Visual Communication
+
+```{r Visual Communication}
+# Create a multi-panel plot using ggplot2 and facet_wrap() to visualise how the abundance of different species changes along the salinity gradient.
+ggplot(summary_table, aes(x = m_salinity, y = m_catch)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = m_catch - se_catch, ymax = m_catch + se_catch), width = 0.2) +
+  geom_errorbarh(aes(xmin = m_salinity - se_salinity, xmax = m_salinity + se_salinity), height = 0.2) +
+  facet_wrap(~ species) +
+  labs(
+    title = "Mean Fish Catch vs Mean Salinity with Standard Errors",
+    x = "Mean Salinity (± SE)",
+    y = "Mean Fish Catch (± SE)"
+  ) +
+  theme_bw() +
+  theme(
+    strip.text = element_text(face = "italic") # Ensure facet labels are italicised
+  )
+
+```
