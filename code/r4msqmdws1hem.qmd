@@ -9,7 +9,8 @@ editor: visual
 #Workshop 1 R for Marine Science 
 #AI assistant turned off
 #learning how to load, read, and use datasets from files
-#playing around w palmer penguins for tibbl and other uses 
+#playing around w palmer penguins for tibbl and other uses
+#Note rather than starting with a R script as the directions instructed I did this whole workshop in a QMD file for practice using QMD files :)
 
 ```
 
@@ -256,8 +257,6 @@ mass_compare_plot
 ```{r}
 #--#
 #In your .qmd template, try creating a new plot. Experiment with swapping sd_mass (standard deviation) for standard error—you will need to divide your sd by the square root of n (sd / sqrt(n)). See how that changes your visual interpretation of the data uncertainty. Present the summary table alongside the associated figure and write down your thoughts on the underlying ecological story that the data are telling.
-# Install the package (only need to run this line once)
-#install.packages("plotrix")
 
 # Load the package and run the function
 library(dplyr)
@@ -288,7 +287,7 @@ mass_summary
 
 
 ##--##
-#Standard error describes how precisely the samples represent the true population mean so I feel like it would be better than standard deviation for this large data set 
+#The data visually looks less spread out with standard error meaning the variation in masses of each species in the context of what island seem smaller. Standard error describes how precisely the samples represent the true population mean so I feel like it would be better than standard deviation for this large data set and variation in mass. 
 ```
 ```{r}
 ##--## 
