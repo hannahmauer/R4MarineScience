@@ -354,6 +354,136 @@ print(island_metadata)
 ```
 
 ```{r}
+#Exercise 1: Cleaning the messy metadata
 #Task: Create a new object called clean_metadata. Using mutate(), stringr, and lubridate, fix the island_name column so that it perfectly matches the island column in the penguins dataset (hint: watch out for those hidden spaces!). Then, convert the station_install column into a proper Date object.
+library(dplyr)
+clean_metadata <- island_metadata |>
+  mutate(
+    island_name = str_trim(island_name), # Remove leading/trailing whitespace
+    island_name = str_to_title(island_name), # Convert to title case
+    station_install = dmy(station_install) # Convert to Date object
+  )
 
 ```
+```{r}
+#Exercise 2: The Relational Join
+#Task: Create a new object called penguins_spatial. Use a left_join() to attach your clean_metadata to the main penguins dataset. Hint: Because the column containing the island names is called island in the penguins dataset, and island_name in your metadata, you will need to specify how they match using by = join_by(island == island_name).
+penguins_spatial <- penguins |>
+  left_join(clean_metadata, by = join_by(island == island_name))
+# Scroll to the right to see the new columns
+head(penguins_spatial)
+
+```
+```{r}
+#Task: Starting with your penguins_spatial dataset:
+#Drop any missing values in the body_mass_g column.
+#Group by species and island.
+#Summarise the data to find the maximum body mass (max()).
+#Pivot the dataset wider so that the species form the rows, and the islands form the columns.
+penguins_spatial |>
+  drop_na(body_mass_g) |>
+  group_by(species, island) |>
+  summarise(max_body_mass = max(body_mass_g), .groups = "drop") |>
+  pivot_wider(names_from = island, values_from = max_body_mass)
+
+```
+```{r}
+#2.12 Keystone exercise: Estuary Fish Survey - Data Rescue Mission
+#The Premise: You have inherited a project from a former PhD student who was studying the relationship between water quality and predatory fish assemblages along the Ross River Estuary gradient. Unfortunately, their data management was entirely manual, and the files are a disaster.
+#They left you with four separate datasets:
+#estuary_catch_log.xlsx: Handwritten field counts of fish species (using common names), spread across multiple spreadsheet tabs.
+#estuary_metadata.csv: The spatial coordinates and estuary zones for each site.
+#estuary_sonde_data.csv: High-frequency water quality sensor readings.
+#species_dictionary.csv: A taxonomic lookup table linking local common names to their accepted scientific names.
+#Your mission is to write a single, reproducible R script (or .qmd) that ingests this mess, cleans it, joins it into a single master dataset, and produces a publication-ready visualisation of the estuary's ecology.
+#At the end of this exercise, your final script/document must successfully output:
+#A clean master dataset containing no legacy errors (-999.0), standardised text, a complete zero-catch framework, and scientific names instead of common names.
+#A statistical summary table displaying the mean and standard deviation of fish counts and salinity for each species per zone.
+#A multi-panel plot (faceted by species) showing fish abundance along the salinity gradient, formatted to professional publication standards.
+#Step 1 loading ingesting and reading the data and creating dataframes
+library(tidyverse)
+estuary_metadata <- readr::read_csv("../data/workshop2/estuary_metadata.csv")
+estuary_catch_log <-readxl::read_excel("../data/workshop2/estuary_catch_log.xlsx")
+estuary_sonde_data <-readr::read_csv("../data/workshop2/estuary_sonde_data.csv")
+species_dictionary <- readr::read_csv("../data/workshop2/species_dictionary.csv")
+#Phase 1: Ingestion and Decontamination Load the four datasets. Before you attempt to join them, think about how you will need to wrangle and clean them individually:
+
+```
+
+```{r}
+#Excel Tab Iteration: The catch log is split across multiple tabs (one for each site). You will need to figure out how to read all tabs and bind them together into a single data frame.
+#String Standardisation: The site and species names in the catch log are a mess (e.g., "MANGROVE JACK" vs "mangrove_jack"). Standardise all site and species columns to lowercase with underscores so they can securely match your dictionary and metadata tables later.
+#Temporal Parsing: The dates in the sonde dataset are messy character strings. Parse them into formal Date-Time objects.
+#Hardware Errors: The turbidity sensor occasionally failed and logged a value of -999.0. Identify these and convert them to true NA values before they ruin your averages.
+estuary_catch_log_clean <- estuary_catch_log |>
+  mutate(
+    site = str_to_lower(str_replace_all(site, " ", "_")),
+    species = str_to_lower(str_replace_all(species, " ", "_"))
+  )
+estuary_sonde_data_clean <- estuary_sonde_data |>
+  mutate(
+    timestamp = lubridate::dmy_hm(timestamp),  
+    turbidity = na_if(turbidity, -999.0)
+  )
+
+
+```
+```{r}
+#Phase 2: The Relational Architecture Bring the data together into a cohesive format:
+#Summarise the water sensor data: The sensor data is logged every 15 minutes, but your catch data is daily. Create a daily summary table that calculates the mean temperature and salinity for each site on each day. (Hint: look at the floor_date() function to group by day).
+#Taxonomic Translation: Scientific journals will not accept "bream" or "flathead". Use a mutating join to merge your species_dictionary into your catch data, replacing the common names with accurate scientific taxonomy.
+#The Grand Join: Merge your translated catch data, your spatial metadata, and your daily water quality summaries into a single master data frame.
+#Summarize water quality data
+library(tidyverse)
+library(dplyr)
+estuary_sonde_daily <- estuary_sonde_data_clean |>
+  mutate(date = lubridate::floor_date(timestamp, unit = "day")) |>
+  group_by(site, date) |>
+  summarise(
+    mean_temp = mean(temperature, na.rm = TRUE),
+    mean_salinity = mean(salinity, na.rm = TRUE),
+    .groups = "drop"
+  )
+#Taxonomic translation
+species_dictionary_clean <- species_dictionary |>
+  mutate(
+    common_name = str_to_lower(str_replace_all(common_name, " ", "_")),
+    scientific_name = str_to_lower(str_replace_all(scientific_name, " ", "_"))
+  )
+merged_catch <- estuary_catch_log_clean |>
+  left_join(species_dictionary_clean, by = join_by(species == common_name)) |>
+  select(-species) |>
+  rename(species = scientific_name)
+catch_scientific_name <- merged_catch
+```
+
+```{r}
+##This is when after days I gave up and asked for help from previous students, additional information can be found in qmd file named r4msws2ex12.qmd
+master_df <- catch_scientific_name |>
+  left_join(clean_metadata, by = join_by("site" == "site_name")) |>
+  left_join(summary_sensor_data, by = join_by(site, date))
+master_df
+
+
+```
+
+
+```{r}
+#Phase 3: The Zero-Catch Framework The former student only recorded a row when they actually caught a fish:
+#Use tidyr::complete() to build a zero-data framework. Ensure that every species is represented at every site, on every sampling day.
+#Replace the resulting NA values in the catch column with 0 using coalesce().
+library(tidyr)
+
+```
+```{r}
+#Phase 4: Statistical Extraction From your master dataset, generate a clean summary table showing the mean ± standard error of both the fish catch and the salinity for each scientific species across each estuary zone.
+
+```
+
+```{r}
+#Phase 5: Visual Communication Prove that your data rescue was successful. Construct a multi-panel plot using ggplot2 and facet_wrap().
+#The Goal: Visualise how the abundance of different species changes along the salinity gradient.
+#The Requirement: The plot should have professional axis labels, a clean theme (e.g., theme_minimal()), be ordered spatially (e.g. from upstream to downstream), and the facet labels (the scientific names) should really be italicised!
+
+```
+
